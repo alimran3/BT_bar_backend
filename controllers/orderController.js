@@ -233,7 +233,7 @@ exports.getRestaurantOrders = async (req, res, next) => {
     console.log('Querying orders with:', query);
     
     const orders = await Order.find(query)
-      .populate('customer', 'fullName email phone profileImage')
+      .populate('customer', 'fullName email phone profileImage addresses')
       .populate('items.menuItem', 'name price image')
       .sort('-createdAt')
       .limit(limit * 1)
