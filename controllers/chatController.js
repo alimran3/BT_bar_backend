@@ -5,16 +5,22 @@ const mongoose = require('mongoose');
 
 // @desc    Create a chat for an order
 // @route   POST /api/chat/order/:orderId
-// @access  Private (Restaurant owners only)
+// @access  Private (Restaurant owners and customers)
 exports.createOrderChat = async (req, res, next) => {
   try {
     const { orderId } = req.params;
     
+    console.log('=== CHAT CREATION DEBUG INFO ===');
     console.log('Creating chat for order:', orderId);
-    console.log('User:', req.user);
+    console.log('Request User:', {
+      id: req.user._id,
+      userType: req.user.userType,
+      restaurant: req.user.restaurant
+    });
     
     // Validate order ID format
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      console.log('Invalid order ID format');
       return res.status(400).json({
         success: false,
         message: 'Invalid order ID format',
@@ -34,38 +40,72 @@ exports.createOrderChat = async (req, res, next) => {
       });
     }
     
-    console.log('Order found:', order);
-    
-    // Check if user is the restaurant owner
-    if (req.user.userType !== 'restaurant') {
-      return res.status(403).json({
-        success: false,
-        message: 'Only restaurant owners can create chats',
-      });
-    }
-    
-    // Verify the restaurant owner
-    // For restaurant owners, req.user.restaurant is the restaurant ID
-    // For orders, order.restaurant might be populated as an object or just an ID
-    const userRestaurantId = req.user.restaurant; // This is the restaurant ID for restaurant owners
-    const orderRestaurantId = order.restaurant?._id || order.restaurant;
-    
-    console.log('Authorization check:', {
-      userRestaurantId: userRestaurantId?.toString(),
-      orderRestaurantId: orderRestaurantId?.toString(),
-      userId: req.user._id?.toString()
+    console.log('Order found:', {
+      id: order._id,
+      customer: {
+        id: order.customer._id,
+        fullName: order.customer.fullName
+      },
+      restaurant: {
+        id: order.restaurant._id || order.restaurant,
+        name: order.restaurant.name
+      }
     });
     
-    if (userRestaurantId?.toString() !== orderRestaurantId?.toString()) {
+    // Check if user is either the customer or restaurant owner
+    const isCustomer = req.user._id.toString() === order.customer._id.toString();
+    
+    // For restaurant owner check, we need to compare with the restaurant ID properly
+    let isRestaurantOwner = false;
+    if (req.user.userType === 'restaurant' && req.user.restaurant) {
+      // Get the restaurant ID from the order (could be populated object or ObjectId)
+      const orderRestaurantId = order.restaurant._id ? order.restaurant._id.toString() : order.restaurant.toString();
+      // Get the restaurant ID from the user
+      const userRestaurantId = req.user.restaurant.toString();
+      
+      console.log('Restaurant ID Comparison:', {
+        userRestaurantId,
+        orderRestaurantId,
+        match: userRestaurantId === orderRestaurantId
+      });
+      
+      isRestaurantOwner = userRestaurantId === orderRestaurantId;
+    }
+    
+    console.log('Authorization Results:', {
+      isCustomer,
+      isRestaurantOwner,
+      userId: req.user._id.toString(),
+      customerId: order.customer._id.toString(),
+      userRestaurantId: req.user.restaurant?.toString(),
+      orderRestaurantId: order.restaurant._id ? order.restaurant._id.toString() : order.restaurant.toString()
+    });
+    
+    if (!isCustomer && !isRestaurantOwner) {
+      console.log('AUTHORIZATION FAILED - Not authorized to create chat for this order');
       return res.status(403).json({
         success: false,
         message: 'Not authorized to create chat for this order',
       });
     }
     
+    console.log('Authorization PASSED');
+    
+    // Determine the other participant
+    let otherParticipantId;
+    if (isCustomer) {
+      // Customer is creating chat, so restaurant owner is the other participant
+      otherParticipantId = order.restaurant._id ? order.restaurant._id : order.restaurant;
+      console.log('Customer initiating chat with restaurant:', otherParticipantId);
+    } else {
+      // Restaurant owner is creating chat, so customer is the other participant
+      otherParticipantId = order.customer._id;
+      console.log('Restaurant owner initiating chat with customer:', otherParticipantId);
+    }
+    
     // Check if chat already exists for this order
     let chat = await Chat.findOne({
-      participants: { $all: [order.customer._id, req.user._id] }
+      participants: { $all: [req.user._id, otherParticipantId] }
     });
     
     if (chat) {
@@ -95,8 +135,8 @@ exports.createOrderChat = async (req, res, next) => {
     
     // Create new chat
     chat = new Chat({
-      participants: [order.customer._id, req.user._id],
-      restaurant: order.restaurant._id,
+      participants: [req.user._id, otherParticipantId],
+      restaurant: order.restaurant._id ? order.restaurant._id : order.restaurant,
     });
     
     await chat.save();
