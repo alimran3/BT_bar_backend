@@ -10,17 +10,8 @@ exports.createOrderChat = async (req, res, next) => {
   try {
     const { orderId } = req.params;
     
-    console.log('=== CHAT CREATION DEBUG INFO ===');
-    console.log('Creating chat for order:', orderId);
-    console.log('Request User:', {
-      id: req.user._id,
-      userType: req.user.userType,
-      restaurant: req.user.restaurant
-    });
-    
     // Validate order ID format
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      console.log('Invalid order ID format');
       return res.status(400).json({
         success: false,
         message: 'Invalid order ID format',
@@ -33,24 +24,11 @@ exports.createOrderChat = async (req, res, next) => {
       .populate('restaurant', 'name');
     
     if (!order) {
-      console.log('Order not found:', orderId);
       return res.status(404).json({
         success: false,
         message: 'Order not found',
       });
     }
-    
-    console.log('Order found:', {
-      id: order._id,
-      customer: {
-        id: order.customer._id,
-        fullName: order.customer.fullName
-      },
-      restaurant: {
-        id: order.restaurant._id || order.restaurant,
-        name: order.restaurant.name
-      }
-    });
     
     // Check if user is either the customer or restaurant owner
     const isCustomer = req.user._id.toString() === order.customer._id.toString();
@@ -63,44 +41,24 @@ exports.createOrderChat = async (req, res, next) => {
       // Get the restaurant ID from the user
       const userRestaurantId = req.user.restaurant.toString();
       
-      console.log('Restaurant ID Comparison:', {
-        userRestaurantId,
-        orderRestaurantId,
-        match: userRestaurantId === orderRestaurantId
-      });
-      
       isRestaurantOwner = userRestaurantId === orderRestaurantId;
     }
     
-    console.log('Authorization Results:', {
-      isCustomer,
-      isRestaurantOwner,
-      userId: req.user._id.toString(),
-      customerId: order.customer._id.toString(),
-      userRestaurantId: req.user.restaurant?.toString(),
-      orderRestaurantId: order.restaurant._id ? order.restaurant._id.toString() : order.restaurant.toString()
-    });
-    
     if (!isCustomer && !isRestaurantOwner) {
-      console.log('AUTHORIZATION FAILED - Not authorized to create chat for this order');
       return res.status(403).json({
         success: false,
         message: 'Not authorized to create chat for this order',
       });
     }
     
-    console.log('Authorization PASSED');
-    
     // Determine the other participant
     let otherParticipantId;
     if (isCustomer) {
       // Customer is creating chat, so restaurant owner is the other participant
       otherParticipantId = order.restaurant._id ? order.restaurant._id : order.restaurant;
-      console.log('Customer initiating chat with restaurant:', otherParticipantId);
     } else {
       // Restaurant owner is creating chat, so customer is the other participant
       otherParticipantId = order.customer._id;
-      console.log('Restaurant owner initiating chat with customer:', otherParticipantId);
     }
     
     // Check if chat already exists for this order
@@ -109,17 +67,12 @@ exports.createOrderChat = async (req, res, next) => {
     });
     
     if (chat) {
-      console.log('Chat already exists:', chat._id);
       // Chat already exists, return it
       try {
         await chat.populate('participants', 'fullName profileImage userType');
-        console.log('Participants populated');
         await chat.populate('restaurant', 'name images');
-        console.log('Restaurant populated');
         await chat.populate('messages.sender', 'fullName profileImage');
-        console.log('Messages sender populated');
       } catch (populateError) {
-        console.error('Error during population:', populateError);
         return res.status(500).json({
           success: false,
           message: 'Error populating chat data',
@@ -140,18 +93,13 @@ exports.createOrderChat = async (req, res, next) => {
     });
     
     await chat.save();
-    console.log('New chat created:', chat._id);
     
     // Populate the chat
     try {
       await chat.populate('participants', 'fullName profileImage userType');
-      console.log('Participants populated for new chat');
       await chat.populate('restaurant', 'name images');
-      console.log('Restaurant populated for new chat');
       await chat.populate('messages.sender', 'fullName profileImage');
-      console.log('Messages sender populated for new chat');
     } catch (populateError) {
-      console.error('Error during population for new chat:', populateError);
       return res.status(500).json({
         success: false,
         message: 'Error populating new chat data',
@@ -164,7 +112,6 @@ exports.createOrderChat = async (req, res, next) => {
       chat,
     });
   } catch (error) {
-    console.error('Error in createOrderChat:', error);
     next(error);
   }
 };
