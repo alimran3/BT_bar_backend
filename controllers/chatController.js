@@ -68,9 +68,9 @@ exports.createOrderChat = async (req, res, next) => {
     if (chat) {
       console.log('Chat already exists:', chat._id);
       // Chat already exists, return it
-      await chat.populate('participants', 'fullName profileImage userType')
-        .populate('restaurant', 'name images')
-        .populate('messages.sender', 'fullName profileImage');
+      await chat.populate('participants', 'fullName profileImage userType');
+      await chat.populate('restaurant', 'name images');
+      await chat.populate('messages.sender', 'fullName profileImage');
       
       return res.status(200).json({
         success: true,
@@ -88,9 +88,9 @@ exports.createOrderChat = async (req, res, next) => {
     console.log('New chat created:', chat._id);
     
     // Populate the chat
-    await chat.populate('participants', 'fullName profileImage userType')
-      .populate('restaurant', 'name images')
-      .populate('messages.sender', 'fullName profileImage');
+    await chat.populate('participants', 'fullName profileImage userType');
+    await chat.populate('restaurant', 'name images');
+    await chat.populate('messages.sender', 'fullName profileImage');
     
     res.status(201).json({
       success: true,
