@@ -68,9 +68,21 @@ exports.createOrderChat = async (req, res, next) => {
     if (chat) {
       console.log('Chat already exists:', chat._id);
       // Chat already exists, return it
-      await chat.populate('participants', 'fullName profileImage userType');
-      await chat.populate('restaurant', 'name images');
-      await chat.populate('messages.sender', 'fullName profileImage');
+      try {
+        await chat.populate('participants', 'fullName profileImage userType');
+        console.log('Participants populated');
+        await chat.populate('restaurant', 'name images');
+        console.log('Restaurant populated');
+        await chat.populate('messages.sender', 'fullName profileImage');
+        console.log('Messages sender populated');
+      } catch (populateError) {
+        console.error('Error during population:', populateError);
+        return res.status(500).json({
+          success: false,
+          message: 'Error populating chat data',
+          error: populateError.message
+        });
+      }
       
       return res.status(200).json({
         success: true,
@@ -88,9 +100,21 @@ exports.createOrderChat = async (req, res, next) => {
     console.log('New chat created:', chat._id);
     
     // Populate the chat
-    await chat.populate('participants', 'fullName profileImage userType');
-    await chat.populate('restaurant', 'name images');
-    await chat.populate('messages.sender', 'fullName profileImage');
+    try {
+      await chat.populate('participants', 'fullName profileImage userType');
+      console.log('Participants populated for new chat');
+      await chat.populate('restaurant', 'name images');
+      console.log('Restaurant populated for new chat');
+      await chat.populate('messages.sender', 'fullName profileImage');
+      console.log('Messages sender populated for new chat');
+    } catch (populateError) {
+      console.error('Error during population for new chat:', populateError);
+      return res.status(500).json({
+        success: false,
+        message: 'Error populating new chat data',
+        error: populateError.message
+      });
+    }
     
     res.status(201).json({
       success: true,
