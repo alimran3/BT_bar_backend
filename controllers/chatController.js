@@ -45,12 +45,15 @@ exports.createOrderChat = async (req, res, next) => {
     }
     
     // Verify the restaurant owner
-    const userRestaurantId = req.user.restaurant?._id || req.user.restaurant;
+    // For restaurant owners, req.user.restaurant is the restaurant ID
+    // For orders, order.restaurant might be populated as an object or just an ID
+    const userRestaurantId = req.user.restaurant; // This is the restaurant ID for restaurant owners
     const orderRestaurantId = order.restaurant?._id || order.restaurant;
     
     console.log('Authorization check:', {
       userRestaurantId: userRestaurantId?.toString(),
-      orderRestaurantId: orderRestaurantId?.toString()
+      orderRestaurantId: orderRestaurantId?.toString(),
+      userId: req.user._id?.toString()
     });
     
     if (userRestaurantId?.toString() !== orderRestaurantId?.toString()) {
