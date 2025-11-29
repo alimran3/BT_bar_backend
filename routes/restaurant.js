@@ -8,6 +8,7 @@ const {
   updateRestaurant,
   deleteRestaurant,
   uploadRestaurantImages,
+  uploadRestaurantProfileImage,
   toggleFavorite,
   getFavorites,
   getRestaurantAnalytics,
@@ -38,6 +39,13 @@ router.post(
   authorize('restaurant'),
   upload.array('images', 10),
   uploadRestaurantImages
+);
+router.post(
+  '/:id/profile-image',
+  protect,
+  authorize('restaurant'),
+  upload.single('image'),
+  uploadRestaurantProfileImage
 );
 router.put('/:id/operating-hours', protect, authorize('restaurant'), updateOperatingHours);
 router.get('/:id/analytics', protect, authorize('restaurant'), getRestaurantAnalytics);

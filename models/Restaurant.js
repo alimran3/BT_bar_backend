@@ -44,6 +44,10 @@ const restaurantSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Email is required'],
     },
+    profileImage: {
+      type: String,
+      default: null,
+    },
     images: [
       {
         type: String,

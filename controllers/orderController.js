@@ -112,9 +112,21 @@ exports.getOrderById = async (req, res, next) => {
 
     // Check authorization
     const isCustomer = order.customer._id.toString() === req.user._id.toString();
-    const isRestaurantOwner =
-      req.user.userType === 'restaurant' &&
-      req.user.restaurant.toString() === order.restaurant._id.toString();
+    
+    // Fix the restaurant owner authorization check
+    let isRestaurantOwner = false;
+    if (req.user.userType === 'restaurant') {
+      // Handle both cases: when restaurant is populated or just an ID
+      const userRestaurantId = req.user.restaurant?._id || req.user.restaurant;
+      const orderRestaurantId = order.restaurant?._id || order.restaurant;
+      
+      console.log('Authorization check:', {
+        userRestaurantId: userRestaurantId?.toString(),
+        orderRestaurantId: orderRestaurantId?.toString()
+      });
+      
+      isRestaurantOwner = userRestaurantId?.toString() === orderRestaurantId?.toString();
+    }
 
     if (!isCustomer && !isRestaurantOwner) {
       return res.status(403).json({
@@ -171,40 +183,69 @@ exports.getCustomerOrders = async (req, res, next) => {
 // @access  Private (Restaurant owners)
 exports.getRestaurantOrders = async (req, res, next) => {
   try {
+    console.log('getRestaurantOrders called with:', {
+      restaurantId: req.params.restaurantId,
+      userId: req.user._id,
+      userType: req.user.userType
+    });
+    
+    // Add a timeout simulation for debugging
+    // Uncomment the following lines if you want to simulate a delay
+    // await new Promise(resolve => setTimeout(resolve, 3000));
+    
     const restaurant = await Restaurant.findById(req.params.restaurantId);
-
+    
     if (!restaurant) {
+      console.log('Restaurant not found:', req.params.restaurantId);
       return res.status(404).json({
         success: false,
         message: 'Restaurant not found',
       });
     }
-
-    // Check ownership
-    if (restaurant.owner.toString() !== req.user._id.toString()) {
+    
+    // Check ownership - Fix the restaurant owner authorization check
+    const userId = req.user._id;
+    const restaurantOwnerId = restaurant.owner._id || restaurant.owner;
+    
+    console.log('Checking ownership:', {
+      ownerId: restaurantOwnerId?.toString(),
+      userId: userId?.toString()
+    });
+    
+    const isOwner = restaurantOwnerId?.toString() === userId?.toString();
+    
+    if (!isOwner) {
+      console.log('Authorization failed - not owner');
       return res.status(403).json({
         success: false,
         message: 'Not authorized',
       });
     }
-
+    
     const { status, page = 1, limit = 20 } = req.query;
-
+    
     let query = { restaurant: req.params.restaurantId };
-
+    
     if (status) {
       query.status = status;
     }
-
+    
+    console.log('Querying orders with:', query);
+    
     const orders = await Order.find(query)
       .populate('customer', 'fullName email phone profileImage')
       .populate('items.menuItem', 'name price image')
       .sort('-createdAt')
       .limit(limit * 1)
       .skip((page - 1) * limit);
-
+      
+    console.log('Found orders:', orders.length);
+    
     const count = await Order.countDocuments(query);
-
+    
+    // Add artificial delay for debugging if needed
+    // await new Promise(resolve => setTimeout(resolve, 1000));
+    
     res.status(200).json({
       success: true,
       count,
@@ -213,6 +254,7 @@ exports.getRestaurantOrders = async (req, res, next) => {
       orders,
     });
   } catch (error) {
+    console.error('Error in getRestaurantOrders:', error);
     next(error);
   }
 };
@@ -233,8 +275,22 @@ exports.updateOrderStatus = async (req, res, next) => {
       });
     }
 
-    // Check ownership
-    if (order.restaurant.owner.toString() !== req.user._id.toString()) {
+    // Check ownership - Fix the restaurant owner authorization check
+    let isRestaurantOwner = false;
+    if (order.restaurant && order.restaurant.owner) {
+      // Handle both cases: when restaurant is populated or just an ID
+      const orderRestaurantOwnerId = order.restaurant.owner._id || order.restaurant.owner;
+      const userId = req.user._id;
+      
+      console.log('Update status authorization check:', {
+        orderRestaurantOwnerId: orderRestaurantOwnerId?.toString(),
+        userId: userId?.toString()
+      });
+      
+      isRestaurantOwner = orderRestaurantOwnerId?.toString() === userId?.toString();
+    }
+
+    if (!isRestaurantOwner) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized',
@@ -250,13 +306,29 @@ exports.updateOrderStatus = async (req, res, next) => {
       served: ['completed'],
     };
 
-    if (
-      !allowedTransitions[order.status] ||
-      !allowedTransitions[order.status].includes(status)
-    ) {
+    console.log('Validating status transition:', { 
+      currentStatus: order.status, 
+      requestedStatus: status,
+      allowedTransitions 
+    });
+
+    // Check if current status exists in allowed transitions
+    if (!allowedTransitions[order.status]) {
+      const errorMessage = `Invalid status transition: Cannot transition from '${order.status}' to any other status. Current status '${order.status}' is not in the allowed transitions map.`;
+      console.log(errorMessage);
       return res.status(400).json({
         success: false,
-        message: 'Invalid status transition',
+        message: errorMessage,
+      });
+    }
+
+    // Check if requested status is allowed
+    if (!allowedTransitions[order.status].includes(status)) {
+      const errorMessage = `Invalid status transition: Cannot transition from '${order.status}' to '${status}'. Allowed transitions: ${allowedTransitions[order.status].join(', ')}`;
+      console.log(errorMessage);
+      return res.status(400).json({
+        success: false,
+        message: errorMessage,
       });
     }
 

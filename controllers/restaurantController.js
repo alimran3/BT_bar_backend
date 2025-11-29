@@ -244,21 +244,39 @@ exports.deleteRestaurant = async (req, res, next) => {
   }
 };
 
-// @desc    Upload restaurant images
-// @route   POST /api/restaurants/:id/images
+// @desc    Upload restaurant profile image
+// @route   POST /api/restaurants/:id/profile-image
 // @access  Private (Restaurant owners)
-exports.uploadRestaurantImages = async (req, res, next) => {
+exports.uploadRestaurantProfileImage = async (req, res, next) => {
   try {
-    if (!req.files || req.files.length === 0) {
+    console.log('Upload restaurant profile image request:', {
+      params: req.params,
+      user: req.user?._id,
+      file: req.file
+    });
+    
+    if (!req.file) {
+      console.log('No file provided in request');
       return res.status(400).json({
         success: false,
-        message: 'Please upload at least one image',
+        message: 'Please upload an image',
+      });
+    }
+    
+    // Check file size limit
+    const maxFileSize = 5 * 1024 * 1024; // 5MB
+    if (req.file.size > maxFileSize) {
+      console.log('File too large:', { fileName: req.file.originalname, size: req.file.size });
+      return res.status(413).json({
+        success: false,
+        message: `File is too large. Maximum file size is 5MB.`,
       });
     }
 
     const restaurant = await Restaurant.findById(req.params.id);
-
+    
     if (!restaurant) {
+      console.log('Restaurant not found:', req.params.id);
       return res.status(404).json({
         success: false,
         message: 'Restaurant not found',
@@ -267,24 +285,138 @@ exports.uploadRestaurantImages = async (req, res, next) => {
 
     // Check ownership
     if (restaurant.owner.toString() !== req.user._id.toString()) {
+      console.log('Authorization failed - not owner', {
+        ownerId: restaurant.owner.toString(),
+        userId: req.user._id.toString()
+      });
       return res.status(403).json({
         success: false,
         message: 'Not authorized',
       });
     }
+    
+    console.log('Processing profile image for restaurant:', restaurant._id);
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      throw new Error(`Invalid file type: ${req.file.mimetype}. Only JPEG, PNG, WEBP, and GIF files are allowed.`);
+    }
+    
+    // Convert buffer to base64 string
+    const fileStr = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    const result = await uploadToCloudinary(fileStr, 'restora/restaurants/profile');
+    const imageUrl = result.url;
+    
+    console.log('Profile image uploaded to Cloudinary:', imageUrl);
+
+    // Update restaurant profile image
+    restaurant.profileImage = imageUrl;
+    await restaurant.save();
+    
+    console.log('Restaurant profile image updated successfully');
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile image uploaded successfully',
+      profileImage: imageUrl,
+      restaurant,
+    });
+  } catch (error) {
+    console.error('Error in uploadRestaurantProfileImage:', error);
+    next(error);
+  }
+};
+
+// @desc    Upload restaurant images
+// @route   POST /api/restaurants/:id/images
+// @access  Private (Restaurant owners)
+exports.uploadRestaurantImages = async (req, res, next) => {
+  try {
+    console.log('Upload restaurant images request:', {
+      params: req.params,
+      user: req.user?._id,
+      files: req.files
+    });
+    
+    if (!req.files || req.files.length === 0) {
+      console.log('No files provided in request');
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload at least one image',
+      });
+    }
+    
+    // Check file size limits
+    const maxFileSize = 5 * 1024 * 1024; // 5MB
+    for (const file of req.files) {
+      if (file.size > maxFileSize) {
+        console.log('File too large:', { fileName: file.originalname, size: file.size });
+        return res.status(413).json({
+          success: false,
+          message: `File ${file.originalname} is too large. Maximum file size is 5MB.`,
+        });
+      }
+    }
+
+    const restaurant = await Restaurant.findById(req.params.id);
+    
+    if (!restaurant) {
+      console.log('Restaurant not found:', req.params.id);
+      return res.status(404).json({
+        success: false,
+        message: 'Restaurant not found',
+      });
+    }
+
+    // Check ownership
+    if (restaurant.owner.toString() !== req.user._id.toString()) {
+      console.log('Authorization failed - not owner', {
+        ownerId: restaurant.owner.toString(),
+        userId: req.user._id.toString()
+      });
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized',
+      });
+    }
+    
+    console.log('Processing', req.files.length, 'files for restaurant:', restaurant._id);
 
     // Upload images to Cloudinary
     const uploadPromises = req.files.map(async (file) => {
-      const fileStr = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
-      const result = await uploadToCloudinary(fileStr, 'restora/restaurants');
-      return result.url;
+      try {
+        // Log file info for debugging
+        console.log('Processing file:', {
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size
+        });
+        
+        // Validate file type
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+        if (!allowedTypes.includes(file.mimetype)) {
+          throw new Error(`Invalid file type: ${file.mimetype}. Only JPEG, PNG, WEBP, and GIF files are allowed.`);
+        }
+        
+        // Convert buffer to base64 string
+        const fileStr = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+        const result = await uploadToCloudinary(fileStr, 'restora/restaurants');
+        return result.url;
+      } catch (uploadError) {
+        console.error('Error uploading individual file to Cloudinary:', uploadError);
+        throw new Error(`Failed to upload file ${file.originalname}: ${uploadError.message}`);
+      }
     });
 
     const imageUrls = await Promise.all(uploadPromises);
+    console.log('Uploaded image URLs:', imageUrls);
 
     // Add images to restaurant
     restaurant.images = [...restaurant.images, ...imageUrls];
     await restaurant.save();
+    
+    console.log('Restaurant images updated successfully');
 
     res.status(200).json({
       success: true,
@@ -293,6 +425,7 @@ exports.uploadRestaurantImages = async (req, res, next) => {
       restaurant,
     });
   } catch (error) {
+    console.error('Error in uploadRestaurantImages:', error);
     next(error);
   }
 };

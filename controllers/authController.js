@@ -78,13 +78,26 @@ exports.register = async (req, res, next) => {
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    
+    console.log('Login attempt with email:', email);
 
     // Find user and include password
     const user = await User.findOne({ email })
       .select('+password')
       .populate('restaurant');
+      
+    console.log('User found:', user ? 'Yes' : 'No');
+    if (user) {
+      console.log('User data:', {
+        id: user._id,
+        userType: user.userType,
+        hasRestaurant: !!user.restaurant,
+        restaurantId: user.restaurant?._id
+      });
+    }
 
     if (!user) {
+      console.log('Login failed: User not found');
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
@@ -93,7 +106,10 @@ exports.login = async (req, res, next) => {
 
     // Check if password matches
     const isPasswordMatch = await user.comparePassword(password);
+    console.log('Password match:', isPasswordMatch);
+    
     if (!isPasswordMatch) {
+      console.log('Login failed: Invalid password');
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
@@ -102,6 +118,7 @@ exports.login = async (req, res, next) => {
 
     // Check if user is active
     if (!user.isActive) {
+      console.log('Login failed: Account deactivated');
       return res.status(401).json({
         success: false,
         message: 'Account is deactivated',
@@ -110,6 +127,7 @@ exports.login = async (req, res, next) => {
 
     // Generate token
     const token = user.generateAuthToken();
+    console.log('Token generated successfully');
 
     // Remove password from response
     user.password = undefined;
@@ -121,6 +139,7 @@ exports.login = async (req, res, next) => {
       user,
     });
   } catch (error) {
+    console.error('Login error:', error);
     next(error);
   }
 };
@@ -130,13 +149,22 @@ exports.login = async (req, res, next) => {
 // @access  Private
 exports.getMe = async (req, res, next) => {
   try {
+    console.log('GetMe called with user ID:', req.user._id);
     const user = await User.findById(req.user._id).populate('restaurant');
-
+    
+    console.log('GetMe user data:', {
+      id: user._id,
+      userType: user.userType,
+      hasRestaurant: !!user.restaurant,
+      restaurantId: user.restaurant?._id
+    });
+    
     res.status(200).json({
       success: true,
       user,
     });
   } catch (error) {
+    console.error('GetMe error:', error);
     next(error);
   }
 };
