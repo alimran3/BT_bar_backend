@@ -153,17 +153,23 @@ const restaurantSchema = new mongoose.Schema(
 // Index for geospatial queries
 restaurantSchema.index({ location: '2dsphere' });
 
-// Generate unique QR code before saving
-restaurantSchema.pre('save', async function (next) {
-  if (!this.qrCode) {
-    this.qrCode = `RESTORA-${this._id}-${Date.now()}`;
+// Generate unique QR code after saving
+restaurantSchema.post('save', async function(doc) {
+  // Generate QR code only if it doesn't exist yet
+  if (!doc.qrCode) {
+    // Generate the QR code with the actual _id
+    const qrCode = `RESTORA-${doc._id}-${Date.now()}`;
     try {
-      this.qrCodeImage = await QRCode.toDataURL(this.qrCode);
+      const qrCodeImage = await QRCode.toDataURL(qrCode);
+      // Update the document with the QR code
+      await doc.constructor.findByIdAndUpdate(doc._id, { 
+        qrCode: qrCode,
+        qrCodeImage: qrCodeImage
+      });
     } catch (error) {
       console.error('Error generating QR code:', error);
     }
   }
-  next();
 });
 
 // Virtual for checking if restaurant is currently open
