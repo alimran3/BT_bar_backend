@@ -156,8 +156,24 @@ exports.getMe = async (req, res, next) => {
       id: user._id,
       userType: user.userType,
       hasRestaurant: !!user.restaurant,
-      restaurantId: user.restaurant?._id
+      restaurantId: user.restaurant?._id,
+      restaurantData: user.restaurant
     });
+    
+    // If user is a restaurant owner but doesn't have restaurant data, try to find it
+    if (user.userType === 'restaurant' && !user.restaurant) {
+      console.log('Restaurant owner missing restaurant data, searching for restaurant...');
+      const restaurant = await Restaurant.findOne({ owner: user._id });
+      if (restaurant) {
+        console.log('Found restaurant for owner:', restaurant._id);
+        user.restaurant = restaurant._id;
+        await user.save();
+        // Re-populate with the found restaurant
+        await user.populate('restaurant');
+      } else {
+        console.log('No restaurant found for owner');
+      }
+    }
     
     res.status(200).json({
       success: true,
