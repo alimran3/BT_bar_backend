@@ -1,5 +1,80 @@
 const Chat = require('../models/Chat');
 const User = require('../models/User');
+const Order = require('../models/Order');
+
+// @desc    Create a chat for an order
+// @route   POST /api/chat/order/:orderId
+// @access  Private (Restaurant owners only)
+exports.createOrderChat = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    
+    // Find the order
+    const order = await Order.findById(orderId)
+      .populate('customer', 'fullName')
+      .populate('restaurant', 'name');
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found',
+      });
+    }
+    
+    // Check if user is the restaurant owner
+    if (req.user.userType !== 'restaurant') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only restaurant owners can create chats',
+      });
+    }
+    
+    // Verify the restaurant owner
+    if (order.restaurant._id.toString() !== req.user.restaurant.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to create chat for this order',
+      });
+    }
+    
+    // Check if chat already exists for this order
+    let chat = await Chat.findOne({
+      participants: { $all: [order.customer._id, req.user._id] }
+    });
+    
+    if (chat) {
+      // Chat already exists, return it
+      await chat.populate('participants', 'fullName profileImage userType')
+        .populate('restaurant', 'name images')
+        .populate('messages.sender', 'fullName profileImage');
+      
+      return res.status(200).json({
+        success: true,
+        chat,
+      });
+    }
+    
+    // Create new chat
+    chat = new Chat({
+      participants: [order.customer._id, req.user._id],
+      restaurant: order.restaurant._id,
+    });
+    
+    await chat.save();
+    
+    // Populate the chat
+    await chat.populate('participants', 'fullName profileImage userType')
+      .populate('restaurant', 'name images')
+      .populate('messages.sender', 'fullName profileImage');
+    
+    res.status(201).json({
+      success: true,
+      chat,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // @desc    Get user chats
 // @route   GET /api/chat

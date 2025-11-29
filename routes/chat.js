@@ -5,11 +5,13 @@ const {
   getChatById,
   sendMessage,
   markAsRead,
+  createOrderChat,
 } = require('../controllers/chatController');
 const { protect } = require('../middleware/auth');
 
 // Protected routes
 router.get('/', protect, getChats);
+router.post('/order/:orderId', protect, createOrderChat);
 router.get('/:id', protect, getChatById);
 router.post('/:id/message', protect, sendMessage);
 router.put('/:id/read', protect, markAsRead);
